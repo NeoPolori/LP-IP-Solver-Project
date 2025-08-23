@@ -42,3 +42,8 @@ Thumbs.db
 
 # Ignore Visual Studio workspace files
 .vs/
+bin/
+obj/
+*.user
+*.suo
+*.vsidx
