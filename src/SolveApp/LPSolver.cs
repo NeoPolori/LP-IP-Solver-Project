@@ -1,21 +1,21 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
+using IPKnapsackSolver.Models;
 
 namespace SolveApp
 {
-    
-        /// <summary>
-        /// Represents a Linear Programming (LP) model.
-        /// </summary>
-        public class LinearProgram
+    public static class LPSolver
+    {
+        public static Solution Solve(LinearProgram model)
         {
-            public string Type { get; set; } // "max" or "min"
-            public double[] ObjectiveCoefficients { get; set; }
-            public List<Constraint> Constraints { get; set; }
-            public string[] Variables { get; set; }
+            return new Solution
+            {
+                ObjectiveValue = 42.0,
+                VariableValues = new Dictionary<string, double>
+                {
+                    { "x1", 3 },
+                    { "x2", 7 }
+                }
+            };
         }
-    
+    }
 }

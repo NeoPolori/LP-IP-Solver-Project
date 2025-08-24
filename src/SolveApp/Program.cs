@@ -1,41 +1,57 @@
 ﻿using System;
+using System.IO;
+using IPKnapsackSolver.Models;
 
 namespace SolveApp
 {
     class Program
     {
-       
+        const string SampleLPJson = @"{
+  ""Type"": ""max"",
+  ""ObjectiveCoefficients"": [5, 4],
+  ""Constraints"": [
+    { ""Coefficients"": [6, 4], ""Operator"": ""<="", ""RHS"": 24 },
+    { ""Coefficients"": [1, 2], ""Operator"": ""<="", ""RHS"": 6 }
+  ],
+  ""Variables"": [""x1"", ""x2""]
+}";
+
+const string SampleIPJson = @"{
+  ""Type"": ""max"",
+  ""ObjectiveCoefficients"": [3, 2],
+  ""Constraints"": [
+    { ""Coefficients"": [2, 1], ""Operator"": ""<="", ""RHS"": 10 },
+    { ""Coefficients"": [1, 1], ""Operator"": ""<="", ""RHS"": 6 }
+  ],
+  ""Variables"": [""x1"", ""x2""]
+}";
+
         static void Main(string[] args)
         {
-            // Infinite loop to keep showing the menu until user exits
             while (true)
             {
-                // Display menu options
                 Console.WriteLine("\n=== Optimization Solver Menu ===");
                 Console.WriteLine("1. Solve Linear Program");
                 Console.WriteLine("2. Solve Integer Program");
                 Console.WriteLine("3. Run Sensitivity Analysis");
                 Console.WriteLine("4. Exit");
                 Console.Write("Enter your choice: ");
+                string? choice = Console.ReadLine();
 
-                // Read user input
-                string choice = Console.ReadLine();
-
-                // Route to appropriate method based on input
                 switch (choice)
                 {
                     case "1":
-                        SolveLinearProgram(); // Call LP solver
+                        SolveLinearProgram();
                         break;
                     case "2":
-                        SolveIntegerProgram(); // Call IP solver
+                        SolveIntegerProgram();
                         break;
                     case "3":
-                        RunSensitivityAnalysis(); // Call sensitivity analysis
+                        RunSensitivityAnalysis();
                         break;
                     case "4":
                         Console.WriteLine("Exiting...");
-                        return; // Exit the application
+                        return;
                     default:
                         Console.WriteLine("Invalid option. Please try again.");
                         break;
@@ -43,71 +59,126 @@ namespace SolveApp
             }
         }
 
-        // Method to solve a Linear Program
-        static void SolveLinearProgram()
+
+        // Centralized input path resolver
+        static string? ResolveInputPath(string filename)
         {
+            string? baseDir = AppContext.BaseDirectory;
+            string? projectRoot = Directory.GetParent(baseDir)?.Parent?.Parent?.Parent?.FullName;
+
+            if (projectRoot == null)
+                return null;
+
+            string fullPath = Path.Combine(projectRoot, "input", filename);
+            return File.Exists(fullPath) ? fullPath : null;
+        }
+        // Auto-generate sample files
+        static void EnsureSampleFileExists(string filename, string content)
+{
+    string? projectRoot = Directory.GetParent(AppContext.BaseDirectory)?.Parent?.Parent?.Parent?.FullName;
+    if (projectRoot == null) return;
+
+    string inputDir = Path.Combine(projectRoot, "input");
+    string fullPath = Path.Combine(inputDir, filename);
+
+    if (!Directory.Exists(inputDir))
+        Directory.CreateDirectory(inputDir);
+
+    if (!File.Exists(fullPath))
+    {
+        File.WriteAllText(fullPath, content);
+        Console.WriteLine($"Auto-generated missing file: {fullPath}");
+    }
+}
+
+       // Solve Linear Program
+        static void SolveLinearProgram()
+        {  
             try
             {
-                // Parse LP model from JSON file
-                var lpModel = InputParser.Parse("input/sample_lp.json");
+                EnsureSampleFileExists("sample_lp.json", SampleLPJson);
+                string? inputPath = ResolveInputPath("sample_lp.json");
+                if (inputPath == null)
+                {
+                    Console.WriteLine("Input file not found.");
+                    return;
+                }
 
-                // Solve the LP using LPSolver class
+                var lpModel = IPSolver.Parse(inputPath);
+                if (lpModel == null)
+                {
+                    Console.WriteLine("Failed to parse LP model.");
+                    return;
+                }
+
                 var lpSolution = LPSolver.Solve(lpModel);
-
-                // Display the solution
                 Console.WriteLine("\n--- Linear Program Solution ---");
                 Console.WriteLine(lpSolution.ToString());
             }
             catch (Exception ex)
             {
-                // Handle any errors during parsing or solving
                 Console.WriteLine($"Error solving LP: {ex.Message}");
             }
         }
 
-        // Method to solve an Integer Program
         static void SolveIntegerProgram()
         {
+
             try
             {
-                // Parse IP model from JSON file
-                var ipModel = InputParser.Parse("input/sample_ip.json");
+                EnsureSampleFileExists("sample_ip.json", SampleIPJson);
+                string? inputPath = ResolveInputPath("sample_lp.json"); // or "sample_ip.json"
+                if (inputPath == null)
+                {
+                    Console.WriteLine("Input file not found.");
+                    return;
+                }
 
-                // Solve the IP using IPSolver class
+                var ipModel = IPSolver.Parse(inputPath);
+                if (ipModel == null)
+                {
+                    Console.WriteLine("Failed to parse IP model.");
+                    return;
+                }
+
                 var ipSolution = IPSolver.Solve(ipModel);
-
-                // Display the solution
                 Console.WriteLine("\n--- Integer Program Solution ---");
                 Console.WriteLine(ipSolution.ToString());
             }
             catch (Exception ex)
             {
-                // Handle any errors during parsing or solving
                 Console.WriteLine($"Error solving IP: {ex.Message}");
             }
+            
+            
         }
 
-        // Method to run sensitivity analysis on an LP solution
         static void RunSensitivityAnalysis()
         {
             try
             {
-                // Parse LP model from JSON file
-                var model = InputParser.Parse("input/sample_lp.json");
+                EnsureSampleFileExists("sample_lp.json", SampleLPJson);
+                string? inputPath = ResolveInputPath("sample_lp.json");
+                if (inputPath == null)
+                {
+                    Console.WriteLine("Input file not found for Sensitivity Analysis.");
+                    return;
+                }
 
-                // Solve the LP to get a solution
+                var model = IPSolver.Parse(inputPath);
+                if (model == null)
+                {
+                    Console.WriteLine("Failed to parse LP model for sensitivity analysis.");
+                    return;
+                }
+
                 var solution = LPSolver.Solve(model);
-
-                // Run sensitivity analysis on the solution
                 var analysis = SensitivityAnalyzer.Analyze(solution);
-
-                // Display the analysis results
                 Console.WriteLine("\n--- Sensitivity Analysis ---");
                 Console.WriteLine(analysis.ToString());
             }
             catch (Exception ex)
             {
-                // Handle any errors during parsing, solving, or analysis
                 Console.WriteLine($"Error running analysis: {ex.Message}");
             }
         }

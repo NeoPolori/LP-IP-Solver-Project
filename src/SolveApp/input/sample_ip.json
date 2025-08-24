@@ -1,0 +1,9 @@
+{
+  "Type": "max",
+  "ObjectiveCoefficients": [3, 2],
+  "Constraints": [
+    { "Coefficients": [2, 1], "Operator": "<=", "RHS": 10 },
+    { "Coefficients": [1, 1], "Operator": "<=", "RHS": 6 }
+  ],
+  "Variables": ["x1", "x2"]
+}

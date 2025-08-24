@@ -1,19 +1,12 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.IO;
 using System.Text.Json;
-
-
+using IPKnapsackSolver.Models;
 
 namespace SolveApp
 {
-    // Class to parse input from a JSON file
-    public static class InputParser
+    public static class IPSolver
     {
-        // Method to parse input from a JSON file
         public static LinearProgram Parse(string filePath)
         {
             if (!File.Exists(filePath))
@@ -27,7 +20,18 @@ namespace SolveApp
 
             return model;
         }
-    }
 
-    
+        public static Solution Solve(LinearProgram model)
+        {
+            return new Solution
+            {
+                ObjectiveValue = 100.0,
+                VariableValues = new Dictionary<string, double>
+                {
+                    { "x1", 1 },
+                    { "x2", 0 }
+                }
+            };
+        }
+    }
 }
