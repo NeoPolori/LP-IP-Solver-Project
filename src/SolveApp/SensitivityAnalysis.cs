@@ -1,189 +1,88 @@
 ﻿using System;
-using System.IO;
-using IPKnapsackSolver.Models;
-using SolveApp;
 
-namespace SolveApp
+public class SensitivityAnalysis
 {
-    class KnapsackItem
+
+    public static List<string> PerformSensitivityAnalysis(BranchAndBoundKnapsack solver, List<KnapsackItem> items, KnapsackSolution solution, int capacity)
     {
-        public int Weight { get; set; }
-        public int Value { get; set; }
-        public double ValuePerWeight => Math.Round((double)Value / Weight, 3);
+        var results = new List<string>();
+
+        results.Add("Sensitivity Analysis for Non-Basic Variables:");
+        for (int i = 0; i < items.Count; i++)
+        {
+            if (solution.SelectedItems[i] == 0)
+            {
+                results.Add($"Variable x{i + 1} is non-basic.");
+                DisplayRangeAndApplyChange(results, solver, items, i, solution, capacity);
+            }
+        }
+
+        results.Add("Sensitivity Analysis for Basic Variables:");
+        for (int i = 0; i < items.Count; i++)
+        {
+            if (solution.SelectedItems[i] == 1)
+            {
+                results.Add($"Variable x{i + 1} is basic.");
+                DisplayRangeAndApplyChange(results, solver, items, i, solution, capacity);
+            }
+        }
+
+        results.Add("Sensitivity Analysis for Constraint RHS Values:");
+        for (int j = 0; j < items.Count; j++)
+        {
+            int originalWeight = items[j].Weight;
+            items[j].Weight += 1;
+            var newSolution = solver.Solve();
+            results.Add($"After increasing weight of item {j + 1} by 1, new Objective Value = {newSolution.TotalValue}");
+            items[j].Weight = originalWeight;
+        }
+
+        results.Add("Adding a new activity to the model:");
+        items.Add(new KnapsackItem { Weight = 1, Value = 1 });
+        var solutionWithNewActivity = solver.Solve();
+        results.Add($"Objective Value with new activity = {solutionWithNewActivity.TotalValue}");
+
+        results.Add("Adding a new constraint to the model:");
+        items.Last().Weight += 1;  // Example constraint adjustment
+        var solutionWithNewConstraint = solver.Solve();
+        results.Add($"Objective Value with new constraint = {solutionWithNewConstraint.TotalValue}");
+
+        results.Add("Shadow Prices:");
+        foreach (var item in items)
+        {
+            results.Add($"Shadow price for item {items.IndexOf(item) + 1}: {CalculateShadowPrice(item, solution.TotalValue)}");
+        }
+
+        results.Add("Applying Duality:");
+        var dualSolution = ApplyDuality(items, out int dualValue);
+        results.Add($"Dual Objective Value: {dualValue}");
+        results.Add(dualValue == solution.TotalValue ? "Strong Duality" : "Weak Duality");
+
+        return results;
     }
 
-    class KnapsackSolution
+    public static void DisplayRangeAndApplyChange(List<string> results, BranchAndBoundKnapsack solver, List<KnapsackItem> items, int variableIndex, KnapsackSolution solution, int capacity)
     {
-        public int TotalValue { get; set; }
-        public int TotalWeight { get; set; }
-        public List<int> SelectedItems { get; set; }
-
-        public KnapsackSolution()
-        {
-            SelectedItems = new List<int>();
-        }
+        int originalValue = items[variableIndex].Value;
+        items[variableIndex].Value += 1;
+        var newSolution = solver.Solve();
+        results.Add($"After increasing value of item {variableIndex + 1} by 1, new Objective Value = {newSolution.TotalValue}");
+        items[variableIndex].Value = originalValue;
     }
 
-    class BranchAndBoundKnapsack
+    public static int CalculateShadowPrice(KnapsackItem item, int bestValue)
     {
-        private int Capacity;
-        private List<KnapsackItem> Items;
-        private KnapsackSolution BestSolution;
-        private StreamWriter Writer;
-        private string ObjectiveType;
+        return item.Weight * bestValue;
+    }
 
-        public BranchAndBoundKnapsack(int capacity, List<KnapsackItem> items, StreamWriter writer, string objectiveType)
-        {
-            Capacity = capacity;
-            Items = items.OrderByDescending(i => i.ValuePerWeight).ToList();
-            BestSolution = new KnapsackSolution();
-            Writer = writer;
-            ObjectiveType = objectiveType.ToLower();
-        }
-
-        public KnapsackSolution Solve()
-        {
-            BranchAndBound(0, 0, 0, new List<int>(new int[Items.Count]));
-            return BestSolution;
-        }
-
-        private void BranchAndBound(int index, int currentWeight, int currentValue, List<int> selectedItems)
-        {
-            if (index == Items.Count)
-            {
-                if ((ObjectiveType == "max" && currentWeight <= Capacity && currentValue > BestSolution.TotalValue) ||
-                    (ObjectiveType == "min" && currentWeight <= Capacity && (BestSolution.TotalValue == 0 || currentValue < BestSolution.TotalValue)))
-                {
-                    BestSolution.TotalValue = currentValue;
-                    BestSolution.TotalWeight = currentWeight;
-                    BestSolution.SelectedItems = new List<int>(selectedItems);
-                }
-                return;
-            }
-
-            double bound = CalculateBound(index, currentWeight, currentValue);
-            Writer.WriteLine($"Index: {index}, Current Weight: {currentWeight}, Current Value: {currentValue}, Bound: {Math.Round(bound, 3)}, Selected Items: {string.Join(", ", selectedItems)}");
-
-            if ((ObjectiveType == "max" && bound <= BestSolution.TotalValue) ||
-                (ObjectiveType == "min" && bound >= BestSolution.TotalValue && BestSolution.TotalValue != 0))
-            {
-                return;
-            }
-
-            if (currentWeight + Items[index].Weight <= Capacity)
-            {
-                selectedItems[index] = 1;
-                BranchAndBound(index + 1, currentWeight + Items[index].Weight, currentValue + Items[index].Value, selectedItems);
-            }
-
-            selectedItems[index] = 0;
-            BranchAndBound(index + 1, currentWeight, currentValue, selectedItems);
-        }
-
-        private double CalculateBound(int index, int currentWeight, int currentValue)
-        {
-            double bound = currentValue;
-            int totalWeight = currentWeight;
-
-            for (int i = index; i < Items.Count; i++)
-            {
-                if (totalWeight + Items[i].Weight <= Capacity)
-                {
-                    totalWeight += Items[i].Weight;
-                    bound += Items[i].Value;
-                }
-                else
-                {
-                    int remainingWeight = Capacity - totalWeight;
-                    bound += Items[i].ValuePerWeight * remainingWeight;
-                    break;
-                }
-            }
-            return bound;
-        }
+    public static List<int> ApplyDuality(List<KnapsackItem> items, out int dualValue)
+    {
+        dualValue = 0; // Implement dual problem logic here.
+        return new List<int>(new int[items.Count]);
     }
 
 
-
-}
-
-
-
-
-class Program
-    {
-
-        
-
-    static void Main(string[] args)
-        {
-            bool exit = false;
-            while (!exit)
-            {
-            Console.WriteLine("1. Solve Knapsack Problem");
-            Console.WriteLine("2. Perform Sensitivity Analysis");
-            Console.WriteLine("3.Solve Linear");
-            Console.WriteLine("4. Exit");
-            Console.Write("Please choose an option: ");
-            string option = Console.ReadLine();
-
-            switch (choice)
-                {
-                    case "1":
-                    SolveKnapsack();
-                    break;
-                    case "2":
-                    PerformSensitivityAnalysisMenu();
-                    break;
-                    case "3":
-                    SolveLinearProgram();
-                        break;
-                    case "4":
-                        exit = true;
-                        break;
-                    default:
-                        Console.WriteLine("Invalid option. Please try again.");
-                        break;
-                }
-            }
-        }
-
-
-      
-
-       // Solve Linear Program
-        static void SolveLinearProgram()
-    {
-
-        try
-        {
-            EnsureSampleFileExists("sample_ip.json", SampleIPJson);
-            string? inputPath = ResolveInputPath("sample_lp.json"); // or "sample_ip.json"
-            if (inputPath == null)
-            {
-                Console.WriteLine("Input file not found.");
-                return;
-            }
-
-            var ipModel = IPSolver.Parse(inputPath);
-            if (ipModel == null)
-            {
-                Console.WriteLine("Failed to parse IP model.");
-                return;
-            }
-
-            var ipSolution = IPSolver.Solve(ipModel);
-            Console.WriteLine("\n--- Integer Program Solution ---");
-            Console.WriteLine(ipSolution.ToString());
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error solving IP: {ex.Message}");
-        }
-
-    }
-
-    static void PerformSensitivityAnalysisMenu()
+    static void RunSensitivityAnalysis()
     {
         Console.WriteLine("Enter the input file path:");
         string inputFilePath = Console.ReadLine();
@@ -328,5 +227,74 @@ class Program
             Console.WriteLine("An error occurred: " + ex.Message);
         }
     }
+    static void WriteSensitivityAnalysisResults(string outputFilePath, List<string> sensitivityAnalysisResults)
+    {
+        using (var file = new StreamWriter(outputFilePath, true))
+        {
+            file.WriteLine("\nSensitivity Analysis Results:");
+            foreach (var result in sensitivityAnalysisResults)
+            {
+                file.WriteLine(result);
+            }
+        }
+    }
+
+    static (int, List<KnapsackItem>, string) ReadInputFile(string filePath)
+    {
+        string[] lines = File.ReadAllLines(filePath);
+
+        if (lines.Length < 2)
+        {
+            throw new InvalidOperationException("The input file must contain at least two lines.");
+        }
+
+        // Extract objective type and item values from the first line
+        string[] firstLine = lines[0].Trim().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        string objectiveType = firstLine[0].ToLower();
+
+        List<KnapsackItem> items = new List<KnapsackItem>();
+        for (int i = 1; i < firstLine.Length; i++)
+        {
+            int value = int.Parse(firstLine[i].TrimStart('+'));
+            items.Add(new KnapsackItem { Value = value });
+        }
+
+        // Extract weights and capacity from the second line
+        string[] constraintLine = lines[1].Trim().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < items.Count; i++)
+        {
+            int weight = int.Parse(constraintLine[i].TrimStart('+'));
+            items[i].Weight = weight;
+        }
+
+        // Parse capacity from the constraint line
+        string capacityStr = constraintLine.Last().Split('=').Last();
+        if (!int.TryParse(capacityStr, out int capacity))
+        {
+            throw new InvalidOperationException("Invalid capacity value in the constraint line.");
+        }
+
+        return (capacity, items, objectiveType);
+    }
+
+
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

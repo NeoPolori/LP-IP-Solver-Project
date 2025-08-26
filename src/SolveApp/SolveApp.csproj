@@ -5,6 +5,8 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <BaseOutputPath>C:\Users\gthem\source\repos\LP-IP-Solver-Project\src\SolveApp\bin\Debug\net8.0</BaseOutputPath>
+    <BaseIntermediateOutputPath>C:\Users\gthem\source\repos\LP-IP-Solver-Project\src\SolveApp\bin\Debug\net8.0</BaseIntermediateOutputPath>
   </PropertyGroup>
 
 </Project>
