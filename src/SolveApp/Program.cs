@@ -122,12 +122,13 @@ class Program
             bool exit = false;
             while (!exit)
             {
-            Console.WriteLine("1. Solve Knapsack Problem");
-            Console.WriteLine("2. Perform Sensitivity Analysis");
-            Console.WriteLine("3.Solve Linear");
-            Console.WriteLine("4. Exit");
-            Console.Write("Please choose an option: ");
-            string option = Console.ReadLine();
+                Console.WriteLine("1. Solve Knapsack Problem");
+                Console.WriteLine("2. Perform Sensitivity Analysis");
+                Console.WriteLine("3.Solve Linear");
+                Console.WriteLine("4. Primal Simplex Algorithm");
+                Console.WriteLine("5. Exit");
+                Console.Write("Please choose an option: ");
+                string option = Console.ReadLine();
 
             switch (choice)
                 {
@@ -135,12 +136,15 @@ class Program
                     SolveKnapsack();
                     break;
                     case "2":
-                    PerformSensitivityAnalysisMenu();
-                    break;
+                        PerformSensitivityAnalysisMenu();
+                        break;
                     case "3":
-                    SolveLinearProgram();
+                        SolveLinearProgram();
                         break;
                     case "4":
+                        LPSolver.LpToCanonical();
+                        break;
+                    case "5":
                         exit = true;
                         break;
                     default:
