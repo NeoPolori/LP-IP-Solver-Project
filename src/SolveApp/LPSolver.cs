@@ -9,91 +9,247 @@ namespace SolveApp
 {
     public static class LPSolver
     {
-        /// <summary>
-        /// Normalizes a linear expression so both "3x1" and "3*x1" work.
-        /// Returns a dictionary of variable -> coefficient.
-        /// </summary>
-        public static Dictionary<string, double> ParseExpression(string input)
+        static (List<double>, double) ParseEquation(string eq, int varCount, int slackIndex)
         {
-            var variables = new Dictionary<string, double>();
+            // Initialize coefficients array
+            List<double> coeffs = new List<double>(new double[varCount]);
 
-            // Ensure * is optional, convert "3x1" -> "3*x1"
-            string normalized = Regex.Replace(input, @"(\d)(x\d+)", "$1*$2");
-
-            // Pattern to capture coefficient * variable
-            string pattern = @"([+-]?\s*\d*\.?\d*)\s*\*\s*(x\d+)";
-            foreach (Match match in Regex.Matches(normalized, pattern))
+            // Extract coefficients
+            var tokens = Regex.Matches(eq, @"([+-]?\d*\*?x\d+)");
+            foreach (Match token in tokens)
             {
-                string coefStr = match.Groups[1].Value.Replace(" ", "");
-                string variable = match.Groups[2].Value;
+                var coefMatch = Regex.Match(token.Value, @"([+-]?\d*)\*?x(\d+)");
+                string coefStr = coefMatch.Groups[1].Value;
+                int idx = int.Parse(coefMatch.Groups[2].Value) - 1;
 
-                double coef = string.IsNullOrEmpty(coefStr) || coefStr == "+" ? 1 :
-                              coefStr == "-" ? -1 :
-                              double.Parse(coefStr);
-
-                if (variables.ContainsKey(variable))
-                    variables[variable] += coef;
-                else
-                    variables[variable] = coef;
+                double num = coefStr switch
+                {
+                    "" or "+" => 1,
+                    "-" => -1,
+                    _ => double.Parse(coefStr)
+                };
+                coeffs[idx] = num;
             }
 
-            return variables;
+            // Extract right-hand side
+            var rhsMatch = Regex.Match(eq, @"=\s*(-?\d+)");
+            double rhs = double.Parse(rhsMatch.Groups[1].Value);
+
+            // Add slack variables
+            coeffs.AddRange(new double[slackIndex]);
+            if (eq.Contains("<="))
+                coeffs.Add(1);
+            else if (eq.Contains(">="))
+                coeffs.Add(-1);
+            else
+                coeffs.Add(0);
+
+            return (coeffs, rhs);
         }
 
-        /// <summary>
-        /// Converts a LinearProgram model into canonical (conical) form string.
-        /// </summary>
-        public static string ToConicalForm(LinearProgram model)
+        static void LpToCanonical()
         {
-            var sb = new StringBuilder();
+            Console.WriteLine("Enter LP problem in format:");
+            Console.WriteLine("MAX z = -3x1 - 4x2");
+            Console.Write("Objective: ");
+            string obj = Console.ReadLine();
 
-            // Objective
-            sb.AppendLine($"{model.Type.ToUpper()} Z = " +
-                string.Join(" + ", model.ObjectiveCoefficients
-                    .Select((c, i) => $"{c}*{model.Variables[i]}")));
-
-            sb.AppendLine("Subject to:");
-
-            int slackCount = 1;
-
-            foreach (var constraint in model.Constraints)
+            // Parse objective function
+            var varCountMatch = Regex.Matches(obj, @"x(\d+)");
+            int varCount = 0;
+            foreach (Match m in varCountMatch)
             {
-                var lhs = string.Join(" + ",
-                    constraint.Coefficients.Select((c, i) => $"{c}*{model.Variables[i]}"));
-
-                string row = lhs;
-
-                if (constraint.Operator == "<=")
-                {
-                    row += $" + s{slackCount} = {constraint.RHS}";
-                    slackCount++;
-                }
-                else if (constraint.Operator == ">=")
-                {
-                    row += $" - s{slackCount} = {constraint.RHS}";
-                    slackCount++;
-                }
-                else // "="
-                {
-                    row += $" = {constraint.RHS}";
-                }
-
-                sb.AppendLine(row);
+                varCount = Math.Max(varCount, int.Parse(m.Groups[1].Value));
             }
 
-            // Add non-negativity conditions
-            sb.AppendLine("All variables >= 0");
-            if (slackCount > 1)
+            List<double> objCoeffs = new List<double>(new double[varCount]);
+            var tokens = Regex.Matches(obj, @"([+-]?\d*\*?x\d+)");
+            foreach (Match token in tokens)
             {
-                sb.AppendLine($"Slack variables s1..s{slackCount - 1} >= 0");
+                var coefMatch = Regex.Match(token.Value, @"([+-]?\d*)\*?x(\d+)");
+                string coefStr = coefMatch.Groups[1].Value;
+                int idx = int.Parse(coefMatch.Groups[2].Value) - 1;
+
+                double num = coefStr switch
+                {
+                    "" or "+" => 1,
+                    "-" => -1,
+                    _ => double.Parse(coefStr)
+                };
+                objCoeffs[idx] = num;
             }
 
-            return sb.ToString();
+            // Constraints
+            Console.Write("How many constraints? ");
+            int n = int.Parse(Console.ReadLine());
+            List<List<double>> constraints = new List<List<double>>();
+            List<double> rhsValues = new List<double>();
+            int slackIndex = 0;
+
+            for (int i = 0; i < n; i++)
+            {
+                Console.Write($"Constraint {i + 1}: ");
+                var (coeffs, rhs) = ParseEquation(Console.ReadLine(), varCount, slackIndex);
+                constraints.Add(coeffs);
+                rhsValues.Add(rhs);
+                slackIndex++;
+            }
+
+            // Build tableau
+            int numSlacks = n;
+            int numVars = varCount + numSlacks;
+            List<List<double>> tableau = new List<List<double>>();
+            for (int i = 0; i < n; i++)
+            {
+                List<double> row = new List<double>(constraints[i]);
+                row.Add(rhsValues[i]);
+                tableau.Add(row);
+            }
+
+            List<double> objRow = objCoeffs.Select(c => -c).ToList();
+            objRow.AddRange(Enumerable.Repeat(0.0, numSlacks));
+            objRow.Add(0.0);
+            tableau.Add(objRow);
+
+            // Basis and headers
+            List<string> basis = Enumerable.Range(1, n).Select(i => $"s{i}").ToList();
+            List<string> headers = Enumerable.Range(1, varCount).Select(i => $"x{i}").Concat(Enumerable.Range(1, numSlacks).Select(i => $"s{i}")).ToList();
+
+            // Perform simplex
+            PerformPrimalSimplex(tableau, basis, headers);
         }
 
-        /// <summary>
-        /// Dummy solver (replace later with simplex).
-        /// </summary>
+        static void PerformPrimalSimplex(List<List<double>> tableau, List<string> basis, List<string> headers)
+        {
+            int iteration = 0;
+            int numCols = headers.Count;
+            int numRows = tableau.Count; // including objective
+
+            Console.WriteLine("\nCanonical Form Tableau:");
+            DisplayTableau(tableau, basis, headers);
+
+            while (true)
+            {
+                // Find entering column (most negative in objective row)
+                List<double> objRow = tableau[numRows - 1];
+                double minVal = 0;
+                int enteringCol = -1;
+                for (int j = 0; j < numCols; j++)
+                {
+                    if (objRow[j] < minVal)
+                    {
+                        minVal = objRow[j];
+                        enteringCol = j;
+                    }
+                }
+
+                if (enteringCol == -1)
+                {
+                    break; // Optimal
+                }
+
+                // Find pivot row (min positive ratio)
+                double minRatio = double.PositiveInfinity;
+                int pivotRow = -1;
+                for (int i = 0; i < numRows - 1; i++)
+                {
+                    double coeff = tableau[i][enteringCol];
+                    double rhs = tableau[i][numCols];
+                    if (coeff > 0)
+                    {
+                        double ratio = rhs / coeff;
+                        if (ratio < minRatio)
+                        {
+                            minRatio = ratio;
+                            pivotRow = i;
+                        }
+                    }
+                }
+
+                if (pivotRow == -1)
+                {
+                    Console.WriteLine("Unbounded solution.");
+                    return;
+                }
+
+                // Announce pivot
+                Console.WriteLine($"Pivot row: {basis[pivotRow]}, Pivot column: {headers[enteringCol]}");
+
+                // Perform pivot
+                double pivotVal = tableau[pivotRow][enteringCol];
+                // Normalize pivot row
+                for (int j = 0; j <= numCols; j++)
+                {
+                    tableau[pivotRow][j] /= pivotVal;
+                }
+
+                // Eliminate in other rows (including objective)
+                for (int k = 0; k < numRows; k++)
+                {
+                    if (k == pivotRow) continue;
+                    double factor = tableau[k][enteringCol];
+                    for (int j = 0; j <= numCols; j++)
+                    {
+                        tableau[k][j] -= factor * tableau[pivotRow][j];
+                    }
+                }
+
+                // Update basis
+                basis[pivotRow] = headers[enteringCol];
+
+                // Next iteration
+                iteration++;
+                Console.WriteLine($"\nIteration {iteration}:");
+                DisplayTableau(tableau, basis, headers);
+            }
+
+            double optimalZ = tableau[numRows - 1][numCols];
+            Console.WriteLine("Optimal solution reached.");
+            Console.WriteLine($"Optimal value of z: {optimalZ}");
+            Console.WriteLine("x1, x2, ..., >= 0");
+        }
+
+        static void DisplayTableau(List<List<double>> tableau, List<string> basis, List<string> headers)
+        {
+            int numCols = headers.Count;
+
+            // Header
+            Console.Write("Basis | ");
+            foreach (string h in headers)
+            {
+                Console.Write($"{h,4} ");
+            }
+            Console.WriteLine("| RHS  ");
+
+            // Separator
+            Console.Write("------+-");
+            Console.Write(new string('-', numCols * 5));
+            Console.WriteLine("+------");
+
+            // Constraint rows
+            for (int i = 0; i < basis.Count; i++)
+            {
+                Console.Write($"{basis[i],-6}| ");
+                for (int j = 0; j < numCols; j++)
+                {
+                    Console.Write($"{Math.Round(tableau[i][j], 3),4} ");
+                }
+                Console.WriteLine($"| {Math.Round(tableau[i][numCols], 3),4} ");
+            }
+
+            // Z row
+            Console.Write("Z     | ");
+            for (int j = 0; j < numCols; j++)
+            {
+                Console.Write($"{Math.Round(tableau[tableau.Count - 1][j], 3),4} ");
+            }
+            Console.WriteLine($"| {Math.Round(tableau[tableau.Count - 1][numCols], 3),4} ");
+        }
+
+        //To trigger eveything we need to run LpToCanonical();
+
+
+
         public static Solution Solve(LinearProgram model)
         {
             // For now just return dummy result
